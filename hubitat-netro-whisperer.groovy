@@ -14,6 +14,7 @@ import groovyx.net.http.ContentType
 
 metadata {
     definition (name: "Netro Whisperer Smart Plant Sensor", namespace: "sdachen.netrowhisperer", author: "Scott Deeann Chen") {
+        
         capability "TemperatureMeasurement"
         capability "IlluminanceMeasurement"
 
