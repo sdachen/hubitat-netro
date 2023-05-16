@@ -16,20 +16,29 @@ import groovyx.net.http.ContentType
 metadata {
     definition (name: "Netro Pixie Smart Hose Faucet Timer", namespace: "sdachen.netro", author: "Scott Deeann Chen") {
 
+        // Add capability so that device.getSupportedAttributes() does not show up as empty.
+        // This is useful for InfluxDB Logger integration.
+        capability "Sensor"
+
         command "refresh"
         command "waterMinutes", ["number"]
         command "pauseWateringDays", ["number"]
         command "cancelManualSchedules"
 
         attribute "batteryLevel", "double"
-        attribute "isActiveToday", "boolean"
-        attribute "scheduleSource", "string"
+        attribute "nextScheduleSource", "string"
         attribute "nextStartTimeUtc", "string"
         attribute "nextEndTimeUtc", "string"
         attribute "nextStartTimeLocal", "string"
         attribute "nextEndTimeLocal", "string"
         attribute "nextDateLocal", "string"
-
+        attribute "lastScheduleSource", "string"
+        attribute "lastStartTimeUtc", "string"
+        attribute "lastEndTimeUtc", "string"
+        attribute "lastStartTimeLocal", "string"
+        attribute "lastEndTimeLocal", "string"
+        attribute "lastScheduleStatus", "string"
+        attribute "lastDateLocal", "string"
     }
 
     preferences {
@@ -75,12 +84,8 @@ void cancelManualSchedules() {
 void asyncGetSchedules() {
     if (enableLogging) log.debug "asyncGetSchedules()"
 
-    def today = new Date(now())
-    def todayString = today.format("yyyy-MM-dd")
-
     Map query = [
-        key: serialNumber,
-        start_date: todayString
+        key: serialNumber
     ]
     Map params = [
         uri: netroURI,
@@ -98,18 +103,18 @@ void parseResponseSchedule(response, responseData) {
         def currentTime = new Date(now())
 
         def json = response.getJson()
-        def schedules = json.data.schedules.findAll { toDateTime(it.start_time + "Z").after(currentTime) }
+        def nextSchedules = json.data.schedules.findAll { toDateTime(it.start_time + "Z").after(currentTime) }
         
-        if (schedules.size > 0) {
+        if (nextSchedules.size > 0) {
             
-            def firstSchedule = schedules[0]
+            def firstSchedule = nextSchedules[0]
             def firstDateTime = toDateTime(firstSchedule.start_time + "Z")
             
-            for (int i = 0; i < schedules.size; ++i) {
-                def dateTime = toDateTime(schedules[i].start_time + "Z")
+            for (int i = 0; i < nextSchedules.size; ++i) {
+                def dateTime = toDateTime(nextSchedules[i].start_time + "Z")
                 if (firstDateTime.after(dateTime)) {
                     firstDateTime = dateTime
-                    firstSchedule = schedules[i]
+                    firstSchedule = nextSchedules[i]
                 }
             }
 
@@ -117,15 +122,38 @@ void parseResponseSchedule(response, responseData) {
             sendEvent(name: "nextEndTimeUtc", value: firstSchedule.end_time, descriptionText: "Next End Time UTC", isStateChange: false)
             sendEvent(name: "nextStartTimeLocal", value: firstSchedule.local_start_time, descriptionText: "Next Start Time Local", isStateChange: false)
             sendEvent(name: "nextEndTimeLocal", value: firstSchedule.local_end_time, descriptionText: "Next End Time Local", isStateChange: false)
-            sendEvent(name: "scheduleSource", value: firstSchedule.source, descriptionText: "Schedule source", isStateChange: false)
+            sendEvent(name: "nextScheduleSource", value: firstSchedule.source, descriptionText: "Schedule source", isStateChange: false)
             sendEvent(name: "nextDateLocal", value: firstSchedule.local_date, descriptionText: "Next local date.", isStateChange: false)
-            sendEvent(name: "isActiveToday", value: true, descriptionText: "Data available.", isStateChange: false)
-        } else {
-            sendEvent(name: "isActiveToday", value: false, descriptionText: "No data.", isStateChange: false)
         }
+
+        def prevSchedules = json.data.schedules.findAll { toDateTime(it.start_time + "Z").before(currentTime) && it.status == "EXECUTED"}
+        log.debug prevSchedules.size
+        if (prevSchedules.size > 0) {
+            
+            def lastSchedule = prevSchedules[0]
+            def lastDateTime = toDateTime(lastSchedule.start_time + "Z")
+
+            for (int i = 0; i < prevSchedules.size; ++i) {
+                def dateTime = toDateTime(prevSchedules[i].start_time + "Z")
+                if (lastDateTime.before(dateTime)) {
+                    lastDateTime = dateTime
+                    lastSchedule = prevSchedules[i]
+                }
+            }
+
+            sendEvent(name: "lastStartTimeUtc", value: lastSchedule.start_time, descriptionText: "Last Start Time UTC", isStateChange: false)
+            sendEvent(name: "lastEndTimeUtc", value: lastSchedule.end_time, descriptionText: "Last End Time UTC", isStateChange: false)
+            sendEvent(name: "lastStartTimeLocal", value: lastSchedule.local_start_time, descriptionText: "Last Start Time Local", isStateChange: false)
+            sendEvent(name: "lastEndTimeLocal", value: lastSchedule.local_end_time, descriptionText: "Last End Time Local", isStateChange: false)
+            sendEvent(name: "lastScheduleSource", value: lastSchedule.source, descriptionText: "Schedule source", isStateChange: false)
+            sendEvent(name: "lastScheduleStatus", value: lastSchedule.status, descriptionText: "Schedule status", isStateChange: false)
+            sendEvent(name: "lastDateLocal", value: lastSchedule.local_date, descriptionText: "Last local date.", isStateChange: false)
+
+            lastScheduleStatus
+        }
+
     } else {
-        if (enableLogging) log.debug "Request Error!"
-        sendEvent(name: "isActiveToday", value: false, descriptionText: "Request Error.", isStateChange: false)
+        if (enableLogging) log.debug "Request failed."
     }
 }
 
