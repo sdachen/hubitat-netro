@@ -32,6 +32,7 @@ metadata {
         attribute "nextStartTimeLocal", "string"
         attribute "nextEndTimeLocal", "string"
         attribute "nextDateLocal", "string"
+
         attribute "lastScheduleSource", "string"
         attribute "lastStartTimeUtc", "string"
         attribute "lastEndTimeUtc", "string"
@@ -39,6 +40,7 @@ metadata {
         attribute "lastEndTimeLocal", "string"
         attribute "lastScheduleStatus", "string"
         attribute "lastDateLocal", "string"
+        attribute "lastWateringTimeString", "string"
     }
 
     preferences {
@@ -127,7 +129,6 @@ void parseResponseSchedule(response, responseData) {
         }
 
         def prevSchedules = json.data.schedules.findAll { toDateTime(it.start_time + "Z").before(currentTime) && it.status == "EXECUTED"}
-        log.debug prevSchedules.size
         if (prevSchedules.size > 0) {
             
             def lastSchedule = prevSchedules[0]
@@ -141,6 +142,8 @@ void parseResponseSchedule(response, responseData) {
                 }
             }
 
+            def lastWateringTimeString = lastSchedule.local_date + "_" + lastSchedule.local_start_time.substring(0,5) + "-" + lastSchedule.local_end_time.substring(0,5)
+
             sendEvent(name: "lastStartTimeUtc", value: lastSchedule.start_time, descriptionText: "Last Start Time UTC", isStateChange: false)
             sendEvent(name: "lastEndTimeUtc", value: lastSchedule.end_time, descriptionText: "Last End Time UTC", isStateChange: false)
             sendEvent(name: "lastStartTimeLocal", value: lastSchedule.local_start_time, descriptionText: "Last Start Time Local", isStateChange: false)
@@ -148,6 +151,8 @@ void parseResponseSchedule(response, responseData) {
             sendEvent(name: "lastScheduleSource", value: lastSchedule.source, descriptionText: "Schedule source", isStateChange: false)
             sendEvent(name: "lastScheduleStatus", value: lastSchedule.status, descriptionText: "Schedule status", isStateChange: false)
             sendEvent(name: "lastDateLocal", value: lastSchedule.local_date, descriptionText: "Last local date.", isStateChange: false)
+            sendEvent(name: "lastWateringTimeString", value: lastWateringTimeString, descriptionText: "Last time string.", isStateChange: false)
+            
 
             lastScheduleStatus
         }
@@ -211,3 +216,4 @@ void callbackGetSchedules(response, data) {
     asyncGetSchedules()
 
 }
+
